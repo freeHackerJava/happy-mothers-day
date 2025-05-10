@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Happy Mothers' Day</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: consolas;
+            background-color: black;
+            overflow: hidden;
+        }
+        #fireworkCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        .message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 3em;
+            text-align: center;
+            z-index: 2;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 3s;
+        }
+        #fpsCounter {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            color: white;
+            z-index: 3;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="fireworkCanvas"></canvas>
+    <div class="message" id="message">Happy Mothers' Day!</div>
+    <div id="fpsCounter"></div>
+    
+    <script>
+    (function() {
+        // Performance monitoring
+        let frameCount = 0;
+        let lastFpsUpdate = 0;
+        const fpsElement = document.getElementById('fpsCounter');
+        
+        // Canvas setup
+        const canvas = document.getElementById('fireworkCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Particle system constants
+        const MAX_PARTICLES = 2000;
+        const FPS = 60;
+        const frameInterval = 1000 / FPS;
+        let lastTime = 0;
+        
+        // Initialize canvas
+        function initCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        initCanvas();
+        window.addEventListener('resize', initCanvas);
+        
+        // Particle pool
+        const particlePool = [];
+        let particles = [];
+        let autoFireworkInterval;
+        let isStopping = false;
+        let currentInterval = 300; // Initial firework interval
+        
+        // Get random color
+        function getRandomColor() {
+            const r = Math.floor(Math.random() * 205) + 50;
+            const g = Math.floor(Math.random() * 205) + 50;
+            const b = Math.floor(Math.random() * 205) + 50;
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+        
+        // Get particle from pool or create new
+        function getParticle() {
+            if (particlePool.length > 0) {
+                return particlePool.pop();
+            }
+            return {
+                x: 0, y: 0, radius: 0, color: '',
+                velocity: { x: 0, y: 0 },
+                alpha: 1, decay: 0, gravity: 0
+            };
+        }
+        
+        // Recycle particle
+        function recycleParticle(p) {
+            if (particlePool.length < MAX_PARTICLES) {
+                particlePool.push(p);
+            }
+        }
+        
+        // Create firework with more random position
+        function createFirework(x, y, isRandom = true) {
+            if (particles.length > MAX_PARTICLES * 0.9) return;
+            
+            // If position not specified, generate random position
+            if (isRandom) {
+                x = Math.random() * (canvas.width * 0.7) + canvas.width * 0.15;
+                y = Math.random() * (canvas.height * 0.7) + canvas.height * 0.15;
+            } else {
+                x = Math.random() * canvas.width;
+                y = Math.random() * canvas.height;
+            }
+            
+            const radius = Math.random() * 30 + 30;
+            const particleCount = Math.min(Math.floor(radius * 8), MAX_PARTICLES - particles.length);
+            const color = getRandomColor();
+            
+            for (let i = 0; i < particleCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 5 + 2;
+                
+                const p = getParticle();
+                p.x = x;
+                p.y = y;
+                p.radius = Math.random() * 3 + 1;
+                p.color = color;
+                p.velocity.x = Math.cos(angle) * speed;
+                p.velocity.y = Math.sin(angle) * speed;
+                p.alpha = 1;
+                p.decay = Math.random() * 0.01 + 0.005;
+                p.gravity = 0.02 + Math.random() * 0.03;
+                
+                particles.push(p);
+            }
+        }
+        
+        // Start auto fireworks with better distribution
+        function startAutoFireworks() {
+            clearInterval(autoFireworkInterval);
+            
+            autoFireworkInterval = setInterval(() => {
+                if (isStopping) {
+                    // Gradually increase interval to slow down firework generation
+                    currentInterval += 50;
+                    if (currentInterval > 2000) {
+                        clearInterval(autoFireworkInterval);
+                        return;
+                    }
+                    clearInterval(autoFireworkInterval);
+                    startAutoFireworks();
+                }
+                
+                // Create firework at random position
+                createFirework();
+                
+            }, currentInterval);
+            
+            // Initial fireworks in different positions
+            createFirework(canvas.width * 0.2, canvas.height * 0.3, false);
+            createFirework(canvas.width * 0.5, canvas.height * 0.4, false);
+            createFirework(canvas.width * 0.8, canvas.height * 0.35, false);
+            createFirework(canvas.width * 0.3, canvas.height * 0.25, false);
+            createFirework(canvas.width * 0.7, canvas.height * 0.3, false);
+        }
+        
+        // Smoothly stop fireworks
+        function stopFireworksSmoothly() {
+            isStopping = true;
+            
+            // After a while, increase particle decay to make them fade faster
+            setTimeout(() => {
+                particles.forEach(p => {
+                    p.decay += 0.01;
+                });
+            }, 2000);
+        }
+        
+        // Update particles
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                
+                p.x += p.velocity.x;
+                p.y += p.velocity.y;
+                p.velocity.y += p.gravity;
+                p.velocity.y *= 0.99;
+                p.alpha -= p.decay;
+                
+                if (p.alpha <= 0) {
+                    recycleParticle(particles[i]);
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        // Draw particles
+        function drawParticles() {
+            ctx.save();
+            for (let i = 0, len = particles.length; i < len; i++) {
+                const p = particles[i];
+                
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                
+                const gradient = ctx.createRadialGradient(
+                    p.x, p.y, 0,
+                    p.x, p.y, p.radius
+                );
+                gradient.addColorStop(0, p.color.replace(')', `, ${p.alpha})`).replace('rgb', 'rgba'));
+                gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+        
+        // Animation loop
+        function animate(timestamp) {
+            // Throttle FPS
+            if (timestamp - lastTime < frameInterval) {
+                requestAnimationFrame(animate);
+                return;
+            }
+            lastTime = timestamp;
+            
+            // Update FPS counter
+            frameCount++;
+            if (timestamp - lastFpsUpdate >= 1000) {
+                fpsElement.textContent = `FPS: ${frameCount}`;
+                frameCount = 0;
+                lastFpsUpdate = timestamp;
+            }
+            
+            // Clear with trail effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            updateParticles();
+            drawParticles();
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Start animation
+        startAutoFireworks();
+        animate(0);
+        
+        // Message fade out and start smooth stopping
+        setTimeout(() => {
+            document.getElementById('message').style.opacity = 0;
+            setTimeout(stopFireworksSmoothly, 1000);
+        }, 3000);
+        
+        setTimeout(() => {
+            document.getElementById('message').style.display = 'none';
+        }, 6000);
+        
+        // Click to create firework at mouse position
+        canvas.addEventListener('click', (e) => {
+            createFirework(e.clientX, e.clientY, false);
+        });
+        
+    })();
+    </script>
+</body>
+</html>
